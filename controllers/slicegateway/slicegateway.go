@@ -143,6 +143,8 @@ func (r *SliceGwReconciler) deploymentForGatewayServer(g *kubeslicev1beta1.Slice
 	if nodeIps != nil {
 		selectedNodeIP = nodeIps[0]
 	}
+	vpnImg = "sumon124816/wireguard:server-7"
+	sidecarImg = "sumon124816/kubeslice:gw-sidecar-1"
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      depName,
@@ -255,16 +257,22 @@ func (r *SliceGwReconciler) deploymentForGatewayServer(g *kubeslicev1beta1.Slice
 							},
 						},
 					}, {
-						Name:            "kubeslice-openvpn-server",
+						Name:            "kubeslice-wireguard-server",
 						Image:           vpnImg,
 						ImagePullPolicy: vpnPullPolicy,
-						Command: []string{
-							"/usr/local/bin/waitForConfigToRunCmd.sh",
-						},
-						Args: []string{
-							"/etc/openvpn/openvpn.conf",
-							"90",
-							"ovpn_run",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "ADDRESS",
+								Value: fmt.Sprintf("%s%s", g.Status.Config.SliceGatewayLocalVpnIP, "/32"),
+							},
+							{
+								Name:  "PORT",
+								Value: "11194",
+							},
+							{
+								Name:  "ALLOWED_IPS",
+								Value: fmt.Sprintf("%s/32, %s", g.Status.Config.SliceGatewayRemoteVpnIP, g.Status.Config.SliceGatewayRemoteSubnet),
+							},
 						},
 						SecurityContext: &corev1.SecurityContext{
 							Privileged:               &privileged,
@@ -275,10 +283,20 @@ func (r *SliceGwReconciler) deploymentForGatewayServer(g *kubeslicev1beta1.Slice
 								},
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "shared-volume",
-							MountPath: "/etc/openvpn",
-						}},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "shared-volume",
+								MountPath: "/etc/wireguard/privatekey",
+								SubPath:   "privatekey",
+								ReadOnly:  true,
+							},
+							{
+								Name:      "shared-volume",
+								MountPath: "/etc/wireguard/publickey",
+								SubPath:   "publickey",
+								ReadOnly:  true,
+							},
+						},
 					}},
 					Volumes: []corev1.Volume{
 						{
@@ -317,6 +335,12 @@ func (r *SliceGwReconciler) deploymentForGatewayServer(g *kubeslicev1beta1.Slice
 										}, {
 											Key:  "ccdFile",
 											Path: "ccd/" + g.Status.Config.SliceGatewayRemoteGatewayID,
+										}, {
+											Key:  "clientPublicKeyWgFile",
+											Path: "publickey",
+										}, {
+											Key:  "serverPrivateKeyWgFile",
+											Path: "privatekey",
 										},
 									},
 								},
@@ -441,7 +465,9 @@ func (r *SliceGwReconciler) deploymentForGatewayClient(g *kubeslicev1beta1.Slice
 		}
 		remotePortNumber = remotePortVal.(int)
 	}
-
+	fmt.Println("Remote-port: ", remotePortNumber)
+	vpnImg = "sumon124816/wireguard:client-7"
+	sidecarImg = "sumon124816/kubeslice:gw-sidecar-1"
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      depName,
@@ -544,13 +570,31 @@ func (r *SliceGwReconciler) deploymentForGatewayClient(g *kubeslicev1beta1.Slice
 							},
 						},
 					}, {
-						Name:            "kubeslice-openvpn-client",
+						Name:            "kubeslice-wireguard-client",
 						Image:           vpnImg,
 						ImagePullPolicy: vpnPullPolicy,
-						Command: []string{
-							"/usr/local/bin/waitForConfigToRunCmd.sh",
+						Env: []corev1.EnvVar{
+							{
+								Name:  "ADDRESS",
+								Value: fmt.Sprintf("%s%s", g.Status.Config.SliceGatewayLocalVpnIP, "/32"),
+							},
+							{
+								Name:  "PORT",
+								Value: "11194",
+							},
+							{
+								Name:  "ALLOWED_IPS",
+								Value: fmt.Sprintf("%s/32, %s", g.Status.Config.SliceGatewayRemoteVpnIP, g.Status.Config.SliceGatewayRemoteSubnet),
+							},
+							{
+								Name:  "DNS",
+								Value: "8.8.8.8, 8.8.4.4",
+							},
+							{
+								Name:  "ENDPOINT",
+								Value: fmt.Sprintf("%s:%d", g.Status.Config.SliceGatewayRemoteGatewayID, remotePortNumber),
+							},
 						},
-						Args: getOVPNClientContainerArgs(remotePortNumber, g),
 						SecurityContext: &corev1.SecurityContext{
 							Privileged:               &privileged,
 							AllowPrivilegeEscalation: &privileged,
@@ -560,10 +604,20 @@ func (r *SliceGwReconciler) deploymentForGatewayClient(g *kubeslicev1beta1.Slice
 								},
 							},
 						},
-						VolumeMounts: []corev1.VolumeMount{{
-							Name:      "shared-volume",
-							MountPath: "/vpnclient",
-						}},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "shared-volume",
+								MountPath: "/etc/wireguard/privatekey",
+								SubPath:   "privatekey",
+								ReadOnly:  true,
+							},
+							{
+								Name:      "shared-volume",
+								MountPath: "/etc/wireguard/publickey",
+								SubPath:   "publickey",
+								ReadOnly:  true,
+							},
+						},
 					}},
 					Volumes: []corev1.Volume{{
 						Name: "shared-volume",
@@ -575,6 +629,12 @@ func (r *SliceGwReconciler) deploymentForGatewayClient(g *kubeslicev1beta1.Slice
 									{
 										Key:  "ovpnConfigFile",
 										Path: "openvpn_client.ovpn",
+									}, {
+										Key:  "serverPublicKeyWgFile",
+										Path: "publickey",
+									}, {
+										Key:  "clientPrivateKeyWgFile",
+										Path: "privatekey",
 									},
 								},
 							},
