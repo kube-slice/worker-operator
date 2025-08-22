@@ -20,9 +20,6 @@ package main
 
 import (
 	"flag"
-	"os"
-	"strings"
-
 	"github.com/kubeslice/kubeslice-monitoring/pkg/metrics"
 	"github.com/kubeslice/worker-operator/controllers"
 	"github.com/kubeslice/worker-operator/pkg/monitoring"
@@ -30,6 +27,8 @@ import (
 	"github.com/kubeslice/worker-operator/pkg/slicegwrecycler"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.opencensus.io/stats/view"
+	"os"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.

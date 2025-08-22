@@ -30,11 +30,11 @@ import (
 	"github.com/kubeslice/kubeslice-monitoring/pkg/metrics"
 	"github.com/kubeslice/worker-operator/controllers"
 	ossEvents "github.com/kubeslice/worker-operator/events"
+	"github.com/kubeslice/worker-operator/ocm"
 	"github.com/kubeslice/worker-operator/pkg/cluster"
 	"github.com/kubeslice/worker-operator/pkg/logger"
 	"github.com/kubeslice/worker-operator/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -564,7 +564,15 @@ func (r *Reconciler) updateDashboardCreds(ctx context.Context, cr *hubv1alpha1.C
 	if err != nil {
 		return err
 	}
-	cr.Spec.ClusterProperty.Monitoring.KubernetesDashboard.Endpoint = os.Getenv("CLUSTER_ENDPOINT")
+	if (os.Getenv("OCM_ENABLED")) == "true" {
+		workerClusterEndpoint, err := ocm.GetFirstAPIServerEndpoint()
+		if err != nil {
+			return err
+		}
+		cr.Spec.ClusterProperty.Monitoring.KubernetesDashboard.Endpoint = workerClusterEndpoint
+	} else {
+		cr.Spec.ClusterProperty.Monitoring.KubernetesDashboard.Endpoint = os.Getenv("CLUSTER_ENDPOINT")
+	}
 	cr.Spec.ClusterProperty.Monitoring.KubernetesDashboard.AccessToken = secretName
 	cr.Spec.ClusterProperty.Monitoring.KubernetesDashboard.Enabled = true
 	log.Info("Posting cluster creds to hub cluster", "cluster", os.Getenv("CLUSTER_NAME"))

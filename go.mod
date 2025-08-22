@@ -104,3 +104,5 @@ require (
 )
 
 replace github.com/kubeslice/apis => github.com/kube-slice/apis v0.3.5-0.20250731160639-972be671d43a
+
+replace github.com/kubeslice/worker-operator => github.com/kube-slice/worker-operator v1.5.2-0.20250822052252-34d33d16579c
