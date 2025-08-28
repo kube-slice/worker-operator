@@ -564,7 +564,7 @@ func (r *Reconciler) updateDashboardCreds(ctx context.Context, cr *hubv1alpha1.C
 	if err != nil {
 		return err
 	}
-	if os.Getenv("OCM_ENABLED") == "true" {
+	if ocm.OCMEnabled {
 		workerClusterEndpoint, err := ocm.GetFirstAPIServerEndpoint()
 		if err != nil {
 			return err

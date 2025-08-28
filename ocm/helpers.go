@@ -2,11 +2,14 @@ package ocm
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 )
+
+var OCMEnabled bool
 
 // GetFirstAPIServerEndpoint returns the first IP:port of the kubernetes Service from EndpointSlices
 func GetFirstAPIServerEndpoint() (string, error) {
@@ -41,4 +44,8 @@ func GetFirstAPIServerEndpoint() (string, error) {
 	}
 
 	return "", fmt.Errorf("no endpoint found")
+}
+
+func DefineOCMflag() {
+	flag.BoolVar(&OCMEnabled, "ocm", false, "Enable OCM integration")
 }
