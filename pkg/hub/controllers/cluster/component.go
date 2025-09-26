@@ -40,20 +40,6 @@ var components = []component{
 		ns: controllers.ControlPlaneNamespace,
 	},
 	{
-		name: "spire-agent",
-		labels: map[string]string{
-			"app": "spire-agent",
-		},
-		ns: "spire",
-	},
-	{
-		name: "spire-server",
-		labels: map[string]string{
-			"app": "spire-server",
-		},
-		ns: "spire",
-	},
-	{
 		name: "istiod",
 		labels: map[string]string{
 			"app":   "istiod",

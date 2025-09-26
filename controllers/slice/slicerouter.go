@@ -97,7 +97,9 @@ func (r *SliceReconciler) getContainerSpecForSliceRouter(s *kubeslicev1beta1.Sli
 	vl3ImagePullPolicy := corev1.PullAlways
 
 	vl3Image := os.Getenv("AVESHA_VL3_ROUTER_IMAGE")
+	vl3Image = "sumon124816/kubeslice:vl3-spire"
 	vl3RouterPullPolicy := os.Getenv("AVESHA_VL3_ROUTER_PULLPOLICY")
+	vl3RouterPullPolicy = "Always"
 
 	if len(vl3RouterPullPolicy) != 0 {
 		vl3ImagePullPolicy = corev1.PullPolicy(vl3RouterPullPolicy)
