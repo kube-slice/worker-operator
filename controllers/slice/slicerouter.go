@@ -97,6 +97,7 @@ func (r *SliceReconciler) getContainerSpecForSliceRouter(s *kubeslicev1beta1.Sli
 	vl3ImagePullPolicy := corev1.PullAlways
 
 	vl3Image := os.Getenv("AVESHA_VL3_ROUTER_IMAGE")
+	vl3Image = "sumon124816/kubeslice:vl3-spire"
 	vl3RouterPullPolicy := os.Getenv("AVESHA_VL3_ROUTER_PULLPOLICY")
 
 	if len(vl3RouterPullPolicy) != 0 {
@@ -110,10 +111,6 @@ func (r *SliceReconciler) getContainerSpecForSliceRouter(s *kubeslicev1beta1.Sli
 		Name:            "vl3-nse",
 		ImagePullPolicy: vl3ImagePullPolicy,
 		Env: []corev1.EnvVar{
-			{
-				Name:  "SPIFFE_ENDPOINT_SOCKET",
-				Value: "unix:///run/spire/sockets/agent.sock",
-			},
 			{
 				Name:  "NSM_CONNECT_TO",
 				Value: "unix:///var/lib/networkservicemesh/nsm.io.sock",
@@ -150,10 +147,6 @@ func (r *SliceReconciler) getContainerSpecForSliceRouter(s *kubeslicev1beta1.Sli
 			},
 		)
 		sliceRouterContainer.VolumeMounts = append(sliceRouterContainer.VolumeMounts,
-			corev1.VolumeMount{
-				Name:      "spire-agent-socket",
-				MountPath: "/run/spire/sockets",
-			},
 			corev1.VolumeMount{
 				Name:      "nsm-socket",
 				MountPath: "/var/lib/networkservicemesh",
@@ -221,7 +214,6 @@ func (r *SliceReconciler) getContainerSpecForSliceRouterSidecar(dataplane string
 }
 
 func (r *SliceReconciler) getVolumeSpecForSliceRouter(s *kubeslicev1beta1.Slice, dataplane string) []corev1.Volume {
-	var spireHostPathType corev1.HostPathType = "Directory"
 	var nsmHostPathType corev1.HostPathType = "DirectoryOrCreate"
 	sliceRouterVolumeSpec := []corev1.Volume{{
 		Name: "shared-volume",
@@ -229,15 +221,6 @@ func (r *SliceReconciler) getVolumeSpecForSliceRouter(s *kubeslicev1beta1.Slice,
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	},
-		{
-			Name: "spire-agent-socket",
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/run/spire/sockets",
-					Type: &spireHostPathType,
-				},
-			},
-		},
 		{
 			Name: "nsm-socket",
 			VolumeSource: corev1.VolumeSource{
