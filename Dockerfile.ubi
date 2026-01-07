@@ -42,11 +42,10 @@ COPY events/ events/
 # Build
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GO111MODULE=on go build -mod=vendor -a -o manager main.go
 
-FROM registry.access.redhat.com/ubi10/ubi-minimal as runtime
-
-RUN mkdir -p /licenses
-COPY LICENSE /licenses/
-
+# Use distroless as minimal base image to package the manager binary
+# Refer to https://github.com/GoogleContainerTools/distroless for more details
+FROM gcr.io/distroless/static-debian12:nonroot
+LABEL maintainer="Avesha Systems"
 WORKDIR /
 COPY --from=builder /workspace/manager .
 
