@@ -21,7 +21,6 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/kubeslice/worker-operator/ocm"
 	"os"
 	"reflect"
 	"time"
@@ -31,6 +30,7 @@ import (
 	"github.com/kubeslice/kubeslice-monitoring/pkg/metrics"
 	"github.com/kubeslice/worker-operator/controllers"
 	ossEvents "github.com/kubeslice/worker-operator/events"
+	"github.com/kubeslice/worker-operator/ocm"
 	"github.com/kubeslice/worker-operator/pkg/cluster"
 	"github.com/kubeslice/worker-operator/pkg/logger"
 	"github.com/kubeslice/worker-operator/pkg/utils"

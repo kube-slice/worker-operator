@@ -39,6 +39,7 @@ COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
 COPY events/ events/
+COPY ocm/ ocm/
 # Build
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} GO111MODULE=on go build -mod=vendor -a -o manager main.go
 
