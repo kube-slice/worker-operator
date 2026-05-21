@@ -29,7 +29,7 @@ jobs:
         df . -h
           
     - name: checkout the repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -42,10 +42,10 @@ jobs:
      
     - name: Get branch name
       id: branch-name
-      uses: tj-actions/branch-names@v7.0.7
+      uses: tj-actions/branch-names@6c999acf206f5561e19f46301bb310e9e70d8815 # v7.0.7
       
     - name: build the worker operator
-      uses: docker/build-push-action@v2
+      uses: docker/build-push-action@ac9327eae2b366085ac7f6a2d02df8aa8ead720a # v2
       with:
         tags: worker-operator:${{ steps.vars.outputs.sha_commit }}
         build-args: |
@@ -53,7 +53,7 @@ jobs:
         push: false
         
     - name: Scanning image for vulnerablilities
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@314ff8b43182423b84c50b1670b0e10f858f2d98 # master
       with:
           image-ref: worker-operator:${{ steps.vars.outputs.sha_commit }}
           format: 'table'
@@ -87,7 +87,7 @@ jobs:
         bash .github/workflows/scripts/binary-image-critical.sh
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3
       with:
           name: trivy-scan
           path: scan.txt
@@ -121,7 +121,7 @@ jobs:
         df . -h
 
     - name: Docker Run Action
-      uses: addnab/docker-run-action@v3
+      uses: addnab/docker-run-action@4f65fabd2431ebc8d299f8e5a018d79a769ae185 # v3
       with:
         username: ${{ env.dockeruser }}
         password: ${{ env.dockerpassword }}
@@ -167,7 +167,7 @@ jobs:
         sudo du /usr/ -hx -d 4 --threshold=1G | sort -hr | head
 
     - name: Checkout gh-pages repo
-      uses: actions/checkout@v2
+      uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2
       with:
         repository: kubeslice/e2e-allure-reports
         path: gh-pages
@@ -178,7 +178,7 @@ jobs:
       run: echo "::set-output name=date::$(date +'%Y-%m-%dT%H:%M:%S')"
 
     - name: Allure Report with history
-      uses: PavanMudigonda/allure-html-reporter-github-pages@v1.0
+      uses: PavanMudigonda/allure-html-reporter-github-pages@28bf0da431bc998e9abff4dc70dfc282791cfab8 # v1.0
       id: Allure_report_with_history
       with:
         allure_results: reports
@@ -192,7 +192,7 @@ jobs:
         test_env: Kind
           
     - name: Deploy report to Github Pages
-      uses: peaceiris/actions-gh-pages@v2
+      uses: peaceiris/actions-gh-pages@45b43ab25725682861f953edbb911fe7f402a5b6 # v2
       env:
         PUBLISH_BRANCH: gh-pages
         PERSONAL_TOKEN: ${{ secrets.TOKEN }}
@@ -207,7 +207,7 @@ jobs:
       
     - name: Report link on Pull Request comment
       if: ${{ github.event_name == 'pull_request_target' }}
-      uses: thollander/actions-comment-pull-request@v1
+      uses: thollander/actions-comment-pull-request@8a3fad13c20088e9eb0805666b9fe49509d2fec8 # v1
       with:
         message: |
                  report link  'https://kubeslice.github.io/e2e-allure-reports/Kind-${{ github.event.repository.name }}-${{ steps.date.outputs.date }}-${{ github.base_ref }}-${{ github.run_number }}/index.html'
@@ -224,7 +224,7 @@ jobs:
     
     - name: Send mail
       if: always()
-      uses: dawidd6/action-send-mail@v3
+      uses: dawidd6/action-send-mail@4226df7daafa6fc901a43789c49bf7ab309066e7 # v3
       with:
        server_address: smtp.gmail.com
        server_port: 465
