@@ -58,6 +58,17 @@ func readyToDeployGwClient(sliceGw *kubeslicev1beta1.SliceGateway) bool {
 	return len(sliceGw.Status.Config.SliceGatewayRemoteNodeIPs) > 0 && len(sliceGw.Status.Config.SliceGatewayRemoteNodePorts) != 0 && sliceGw.Status.Config.SliceGatewayRemoteGatewayID != ""
 }
 
+// nsmClientBrokerAppLabel is the app label of the pod that holds the NSM client for every
+// workload on its node.
+//
+// It belongs with nsmgr and the forwarder: all three are NSM infrastructure whose restart
+// invalidates the NSM addresses of the pods on that node, slice gateways included. It was
+// missing here only because it is newer than the two beside it, and the cost of the omission
+// is specific -- a restarted broker produced no pod event this reconciler was watching for, so
+// the gateways came back on fresh addresses that nothing carried to the slice router until the
+// periodic resend, ninety four seconds later on a measured three cluster loop.
+const nsmClientBrokerAppLabel = "nsc-grpc-server"
+
 func getPodType(labels map[string]string) string {
 	podType, found := labels[webhook.PodInjectLabelKey]
 	if found {
@@ -66,7 +77,7 @@ func getPodType(labels map[string]string) string {
 
 	nsmLabel, found := labels["app"]
 	if found {
-		if nsmLabel == "nsmgr-daemonset" || nsmLabel == "nsm-kernel-plane" {
+		if nsmLabel == "nsmgr-daemonset" || nsmLabel == "nsm-kernel-plane" || nsmLabel == nsmClientBrokerAppLabel {
 			return "nsm"
 		}
 	}

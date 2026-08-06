@@ -477,6 +477,24 @@ func (r *SliceGwReconciler) findObjectsForNsmUpdate() (*kubeslicev1beta1.SliceGa
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *SliceGwReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// gwPodPlacementIsSkewed lists pods with a field selector on status.phase.
+	// The cached client can only serve a field selector it has an index for,
+	// and without this registration every such List fails with "Index with
+	// name field:status.phase does not exist" -- which fails the reconcile,
+	// which is retried, several times a second, for as long as the slice
+	// gateway exists. Observed at over a thousand errors in ten minutes on a
+	// single cluster.
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &corev1.Pod{}, "status.phase",
+		func(o client.Object) []string {
+			pod, ok := o.(*corev1.Pod)
+			if !ok {
+				return nil
+			}
+			return []string{string(pod.Status.Phase)}
+		}); err != nil {
+		return err
+	}
+
 	var labelSelector metav1.LabelSelector
 
 	// The slice gateway reconciler needs to be invoked whenever there is an update to the
@@ -507,6 +525,16 @@ func (r *SliceGwReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// The NSM connection broker holds the client for every pod on its node, so its restart
+	// takes every gateway's NSM address with it and hands back new ones. Without this the
+	// restart was invisible here and the slice router kept forwarding to addresses that no
+	// longer existed until the periodic resend.
+	labelSelector.MatchLabels = map[string]string{"app": nsmClientBrokerAppLabel}
+	nsmBrokerPredicate, err := predicate.LabelSelectorPredicate(labelSelector)
+	if err != nil {
+		return err
+	}
+
 	// Check for updates to slice gw pods
 	labelSelector.MatchLabels = map[string]string{webhook.PodInjectLabelKey: "slicegateway"}
 	slicegwPredicate, err := predicate.LabelSelectorPredicate(labelSelector)
@@ -515,7 +543,7 @@ func (r *SliceGwReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	sliceGwUpdPredicate := predicate.Or(
-		slicerouterPredicate, netopPredicate, nsmgrPredicate, nsmfwdPredicate, slicegwPredicate,
+		slicerouterPredicate, netopPredicate, nsmgrPredicate, nsmfwdPredicate, nsmBrokerPredicate, slicegwPredicate,
 	)
 
 	// The slice gateway reconciler needs to be invoked whenever there is an update to the

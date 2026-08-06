@@ -1009,11 +1009,22 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	}
 
 	gwNsmIPs := []string{}
+	// Count only the gateways that have no NSM address at all. That is the signature of one
+	// being between connections -- the interface is gone and the next one will arrive under a
+	// new address within seconds -- and it is the single case where waiting out the steady
+	// state interval means routing over a nexthop that has ceased to exist.
+	//
+	// The other two reasons to skip a gateway are deliberately not counted. A gateway with no
+	// peer, or with a tunnel that is down, has a perfectly good local address; what is broken
+	// is the far side, and during a data centre outage that state lasts hours. Revisiting it
+	// every few seconds would find the same thing every time.
+	reattaching := 0
 	for _, gwPod := range slicegateway.Status.GatewayPodStatus {
 		if isPodPresentInPodList(excludeRouteGwPodList, gwPod.PodName) {
 			continue
 		}
 		if gwPod.LocalNsmIP == "" {
+			reattaching++
 			continue
 		}
 		if gwPod.PeerPodName == "" {
@@ -1023,6 +1034,27 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 			continue
 		}
 		gwNsmIPs = append(gwNsmIPs, gwPod.LocalNsmIP)
+	}
+
+	// An empty list is how the router is told to stop routing this subnet: it removes the
+	// route and forgets the nexthops it was caching. That is right when the gateways are
+	// genuinely gone, and wrong when their addresses are a few seconds away -- it turns a
+	// recoverable gap into a teardown, and discards the very state the router uses to repair
+	// itself. This is reachable now that a connection broker restart wakes this reconciler,
+	// which it does at the moment every gateway on the node is between addresses.
+	if len(gwNsmIPs) == 0 && reattaching > 0 {
+		// Logged as an error, not info. Waiting here is right -- an empty list
+		// tells the router to drop the subnet -- but the wait is unbounded, and
+		// a gateway that never reports an address holds the router's remote
+		// subnets back for as long as it lasts. That happened: gateway
+		// interfaces came back under the wrong name, their sidecars reported no
+		// address, and this waited quietly while cross-DC traffic had no route
+		// at all. The condition has to be visible in the operator's errors, or
+		// the next occurrence is just as silent.
+		log.Error(nil, "no gateway has an address; the slice router has not been told how to reach this subnet",
+			"reattaching", reattaching, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet,
+			"sliceGateway", slicegateway.Name)
+		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
 	sidecarGrpcAddress := podIP + ":5000"
@@ -1035,6 +1067,22 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	if err != nil {
 		log.Error(err, "Unable to send conn ctx to slice router")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil, true
+	}
+
+	// The router only learns a gateway's NSM address when we tell it, and it
+	// cannot discover a new one on its own. Every reconnect allocates a fresh
+	// address, so between a gateway reattaching and the next time we run, the
+	// router holds a nexthop that no longer exists and the kernel has dropped
+	// the multipath route that referenced it. On the steady state interval that
+	// is a minute and a half of cross-DC traffic going nowhere: measured at 94s
+	// on a three cluster loop, where the gateway had its connection back nine
+	// seconds after a broker restart and the route returned on the next tick.
+	//
+	// While a gateway is between addresses, come back promptly instead.
+	if reattaching > 0 {
+		log.Info("gateway reattaching, revisiting sooner to carry its new address to the router",
+			"reattaching", reattaching, "sent", len(gwNsmIPs))
+		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
 	return ctrl.Result{}, nil, false
