@@ -42,6 +42,13 @@ var (
 	// in an event driven manner whenever important pods like the slice router, slice gw pods, and other critical infra
 	// pods restart. Hence, it does not really need an aggressive periodic reconcile interval.
 	SliceGatewayReconcileInterval = 120 * time.Second
+	// gatewaySettlingRequeueInterval is how soon to revisit a slice gateway
+	// whose pods have not all reported an address and an up tunnel yet. The
+	// slice router cannot discover a gateway's new NSM address by itself, so
+	// until we carry it over, the remote subnet route is missing a nexthop --
+	// or, if the kernel dropped the multipath route when the old nexthop link
+	// went away, missing entirely.
+	GatewaySettlingRequeueInterval = 10 * time.Second
 )
 
 const (

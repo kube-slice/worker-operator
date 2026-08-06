@@ -1009,17 +1009,25 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	}
 
 	gwNsmIPs := []string{}
+	// A gateway that is skipped here is one we expect to come back: it is
+	// still attaching, or its tunnel has not come up yet. The route we are
+	// about to install will be missing that nexthop, so the picture is
+	// incomplete and worth revisiting sooner than the steady state interval.
+	settling := 0
 	for _, gwPod := range slicegateway.Status.GatewayPodStatus {
 		if isPodPresentInPodList(excludeRouteGwPodList, gwPod.PodName) {
 			continue
 		}
 		if gwPod.LocalNsmIP == "" {
+			settling++
 			continue
 		}
 		if gwPod.PeerPodName == "" {
+			settling++
 			continue
 		}
 		if gwPod.TunnelStatus.Status != int32(gwsidecarpb.TunnelStatusType_GW_TUNNEL_STATE_UP) {
+			settling++
 			continue
 		}
 		gwNsmIPs = append(gwNsmIPs, gwPod.LocalNsmIP)
@@ -1035,6 +1043,22 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	if err != nil {
 		log.Error(err, "Unable to send conn ctx to slice router")
 		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil, true
+	}
+
+	// The router only learns a gateway's NSM address when we tell it, and it
+	// cannot discover a new one on its own. Every reconnect allocates a fresh
+	// address, so between a gateway reattaching and the next time we run, the
+	// router holds a nexthop that no longer exists and the kernel has dropped
+	// the multipath route that referenced it. On the steady state interval that
+	// is a minute and a half of cross-DC traffic going nowhere: measured at 94s
+	// on a three cluster loop, where the gateway had its connection back nine
+	// seconds after a broker restart and the route returned on the next tick.
+	//
+	// While gateways are still settling, come back promptly instead.
+	if settling > 0 {
+		log.Info("gateways still settling, revisiting sooner to carry their addresses to the router",
+			"settling", settling, "sent", len(gwNsmIPs))
+		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
 	return ctrl.Result{}, nil, false
