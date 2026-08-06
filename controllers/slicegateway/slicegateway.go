@@ -1043,8 +1043,17 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	// itself. This is reachable now that a connection broker restart wakes this reconciler,
 	// which it does at the moment every gateway on the node is between addresses.
 	if len(gwNsmIPs) == 0 && reattaching > 0 {
-		log.Info("no gateway has an address yet, waiting rather than telling the router to drop the subnet",
-			"reattaching", reattaching, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet)
+		// Logged as an error, not info. Waiting here is right -- an empty list
+		// tells the router to drop the subnet -- but the wait is unbounded, and
+		// a gateway that never reports an address holds the router's remote
+		// subnets back for as long as it lasts. That happened: gateway
+		// interfaces came back under the wrong name, their sidecars reported no
+		// address, and this waited quietly while cross-DC traffic had no route
+		// at all. The condition has to be visible in the operator's errors, or
+		// the next occurrence is just as silent.
+		log.Error(nil, "no gateway has an address; the slice router has not been told how to reach this subnet",
+			"reattaching", reattaching, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet,
+			"sliceGateway", slicegateway.Name)
 		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
