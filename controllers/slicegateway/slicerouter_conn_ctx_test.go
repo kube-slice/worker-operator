@@ -119,11 +119,14 @@ func TestSendConnectionContextToSliceRouter(t *testing.T) {
 			wantRequeue:  true,
 			wantAfterSec: controllers.GatewaySettlingRequeueInterval.Seconds(),
 		},
+		// A gateway whose tunnel is down keeps its local address; what is broken is the far
+		// side. During a data centre outage that lasts hours, so it is left on the steady
+		// state interval rather than revisited every few seconds to find the same thing.
+		//
 		// Note GW_TUNNEL_STATE_UP is the zero value of the enum, so a gateway that has never
-		// reported a tunnel status counts as up. That is long standing behaviour and not
-		// changed here; a gateway is counted as settling under exactly the conditions that
-		// exclude it from the nexthop list, so the two cannot disagree.
-		"a gateway whose tunnel is down does not carry traffic": {
+		// reported a tunnel status counts as up. That is long standing behaviour, unchanged
+		// here, and the reason this case sets the status explicitly.
+		"a gateway whose tunnel is down is excluded but not chased": {
 			gwPods: []*kubeslicev1beta1.GwPodInfo{
 				readyGw("gw-0", "10.1.32.7"),
 				{
@@ -133,9 +136,19 @@ func TestSendConnectionContextToSliceRouter(t *testing.T) {
 					},
 				},
 			},
-			wantSent:     [][]string{{"10.1.32.7"}},
-			wantRequeue:  true,
-			wantAfterSec: controllers.GatewaySettlingRequeueInterval.Seconds(),
+			wantSent:    [][]string{{"10.1.32.7"}},
+			wantRequeue: false,
+		},
+		// The far side of the slice is gone, which is a normal state during a data centre
+		// failure drill. The route is withdrawn, as it always was, and this must not turn
+		// into a reconcile every ten seconds for as long as the outage lasts.
+		"every gateway cut off from its peer: withdraw the route on the normal interval": {
+			gwPods: []*kubeslicev1beta1.GwPodInfo{
+				{PodName: "gw-0", LocalNsmIP: "10.1.32.7"},
+				{PodName: "gw-1", LocalNsmIP: "10.1.32.21"},
+			},
+			wantSent:    [][]string{nil},
+			wantRequeue: false,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

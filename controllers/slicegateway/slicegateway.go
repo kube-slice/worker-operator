@@ -1009,25 +1009,28 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	}
 
 	gwNsmIPs := []string{}
-	// A gateway that is skipped here is one we expect to come back: it is
-	// still attaching, or its tunnel has not come up yet. The route we are
-	// about to install will be missing that nexthop, so the picture is
-	// incomplete and worth revisiting sooner than the steady state interval.
-	settling := 0
+	// Count only the gateways that have no NSM address at all. That is the signature of one
+	// being between connections -- the interface is gone and the next one will arrive under a
+	// new address within seconds -- and it is the single case where waiting out the steady
+	// state interval means routing over a nexthop that has ceased to exist.
+	//
+	// The other two reasons to skip a gateway are deliberately not counted. A gateway with no
+	// peer, or with a tunnel that is down, has a perfectly good local address; what is broken
+	// is the far side, and during a data centre outage that state lasts hours. Revisiting it
+	// every few seconds would find the same thing every time.
+	reattaching := 0
 	for _, gwPod := range slicegateway.Status.GatewayPodStatus {
 		if isPodPresentInPodList(excludeRouteGwPodList, gwPod.PodName) {
 			continue
 		}
 		if gwPod.LocalNsmIP == "" {
-			settling++
+			reattaching++
 			continue
 		}
 		if gwPod.PeerPodName == "" {
-			settling++
 			continue
 		}
 		if gwPod.TunnelStatus.Status != int32(gwsidecarpb.TunnelStatusType_GW_TUNNEL_STATE_UP) {
-			settling++
 			continue
 		}
 		gwNsmIPs = append(gwNsmIPs, gwPod.LocalNsmIP)
@@ -1039,9 +1042,9 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	// recoverable gap into a teardown, and discards the very state the router uses to repair
 	// itself. This is reachable now that a connection broker restart wakes this reconciler,
 	// which it does at the moment every gateway on the node is between addresses.
-	if len(gwNsmIPs) == 0 && settling > 0 {
+	if len(gwNsmIPs) == 0 && reattaching > 0 {
 		log.Info("no gateway has an address yet, waiting rather than telling the router to drop the subnet",
-			"settling", settling, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet)
+			"reattaching", reattaching, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet)
 		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
@@ -1066,10 +1069,10 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 	// on a three cluster loop, where the gateway had its connection back nine
 	// seconds after a broker restart and the route returned on the next tick.
 	//
-	// While gateways are still settling, come back promptly instead.
-	if settling > 0 {
-		log.Info("gateways still settling, revisiting sooner to carry their addresses to the router",
-			"settling", settling, "sent", len(gwNsmIPs))
+	// While a gateway is between addresses, come back promptly instead.
+	if reattaching > 0 {
+		log.Info("gateway reattaching, revisiting sooner to carry its new address to the router",
+			"reattaching", reattaching, "sent", len(gwNsmIPs))
 		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
 	}
 
