@@ -1033,6 +1033,18 @@ func (r *SliceGwReconciler) SendConnectionContextToSliceRouter(ctx context.Conte
 		gwNsmIPs = append(gwNsmIPs, gwPod.LocalNsmIP)
 	}
 
+	// An empty list is how the router is told to stop routing this subnet: it removes the
+	// route and forgets the nexthops it was caching. That is right when the gateways are
+	// genuinely gone, and wrong when their addresses are a few seconds away -- it turns a
+	// recoverable gap into a teardown, and discards the very state the router uses to repair
+	// itself. This is reachable now that a connection broker restart wakes this reconciler,
+	// which it does at the moment every gateway on the node is between addresses.
+	if len(gwNsmIPs) == 0 && settling > 0 {
+		log.Info("no gateway has an address yet, waiting rather than telling the router to drop the subnet",
+			"settling", settling, "remoteSubnet", slicegateway.Status.Config.SliceGatewayRemoteSubnet)
+		return ctrl.Result{RequeueAfter: controllers.GatewaySettlingRequeueInterval}, nil, true
+	}
+
 	sidecarGrpcAddress := podIP + ":5000"
 	connCtx := &router.SliceRouterConnCtx{
 		RemoteSliceGwNsmSubnet: slicegateway.Status.Config.SliceGatewayRemoteSubnet,

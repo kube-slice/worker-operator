@@ -525,6 +525,16 @@ func (r *SliceGwReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
+	// The NSM connection broker holds the client for every pod on its node, so its restart
+	// takes every gateway's NSM address with it and hands back new ones. Without this the
+	// restart was invisible here and the slice router kept forwarding to addresses that no
+	// longer existed until the periodic resend.
+	labelSelector.MatchLabels = map[string]string{"app": nsmClientBrokerAppLabel}
+	nsmBrokerPredicate, err := predicate.LabelSelectorPredicate(labelSelector)
+	if err != nil {
+		return err
+	}
+
 	// Check for updates to slice gw pods
 	labelSelector.MatchLabels = map[string]string{webhook.PodInjectLabelKey: "slicegateway"}
 	slicegwPredicate, err := predicate.LabelSelectorPredicate(labelSelector)
@@ -533,7 +543,7 @@ func (r *SliceGwReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	sliceGwUpdPredicate := predicate.Or(
-		slicerouterPredicate, netopPredicate, nsmgrPredicate, nsmfwdPredicate, slicegwPredicate,
+		slicerouterPredicate, netopPredicate, nsmgrPredicate, nsmfwdPredicate, nsmBrokerPredicate, slicegwPredicate,
 	)
 
 	// The slice gateway reconciler needs to be invoked whenever there is an update to the
